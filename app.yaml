@@ -1,2 +1,4 @@
-runtime: go
+runtime: go1.16
 env: flex
+env_variables:
+  CGO_ENABLED: 0

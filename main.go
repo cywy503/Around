@@ -121,7 +121,6 @@ func saveToES(p *Post, id string) {
 func containsFilteredWords(s *string) bool {
 	filteredWords := []string{
 		"fuck",
-		"100",
 	}
 	for _, word := range filteredWords {
 		if strings.Contains(*s, word) {
@@ -132,10 +131,13 @@ func containsFilteredWords(s *string) bool {
 }
 
 func handlerSearch(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Received one request for search")
+	fmt.Printf("Received one request for search, %+v\n", r.URL.Query())
 
 	//Go中定义一个变量，但没有使用它是不允许的,所以用_这里
-	lat, _ := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
+	latStr := r.URL.Query().Get("lat")
+	fmt.Printf("error: %+v\n", latStr)
+	lat, err  := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
+	fmt.Printf("error: %+v\n", err)
 	lon, _ := strconv.ParseFloat(r.URL.Query().Get("lon"), 64)
 
 	ran := DISTANCE
