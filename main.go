@@ -6,14 +6,19 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
+
 	"reflect"
 	"strconv"
 	"strings"
 
+	jwtmiddleware "github.com/auth0/go-jwt-middleware"
+	"github.com/gorilla/mux"
+
 	"cloud.google.com/go/storage"
 	"github.com/google/uuid"
 	elastic "gopkg.in/olivere/elastic.v3"
+	"net/http"
+	"github.com/form3tech-oss/jwt-go"
 )
 
 type Location struct {
@@ -40,6 +45,8 @@ const (
 	ES_URL      = "http://34.132.129.253:9200"
 	BUCKET_NAME = "post-images-349001"
 )
+
+var mySigningKey = []byte("secret")
 
 func main() {
 	// Create a client
@@ -75,10 +82,26 @@ func main() {
 	}
 
 	fmt.Println("started-service")
-	http.HandleFunc("/search", handlerSearch)
-	http.HandleFunc("/post", handlerPost)
-	log.Fatal(http.ListenAndServe(":8080", nil))
 
+	// Here we are instantiating the gorilla/mux router
+	r := mux.NewRouter()
+
+	jwtMiddleware := jwtmiddleware.New(jwtmiddleware.Options{
+		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
+			return mySigningKey, nil
+		},
+		SigningMethod: jwt.SigningMethodHS256,
+	})
+
+	r.Handle("/post", jwtMiddleware.Handler(http.HandlerFunc(handlerPost))).Methods("POST")
+	r.Handle("/search", jwtMiddleware.Handler(http.HandlerFunc(handlerSearch))).Methods("GET")
+
+	//when login/signup. there is no token, then no need to wrap it with jwtMiddleware
+	r.Handle("/login", http.HandlerFunc(loginHandler)).Methods("POST")
+	r.Handle("/signup", http.HandlerFunc(signupHandler)).Methods("POST")
+
+	http.Handle("/", r)
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func handlerPost(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +109,10 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+
+	user := r.Context().Value("user")
+	claims := user.(*jwt.Token).Claims
+	username := claims.(jwt.MapClaims)["username"]
 
 	// 32 << 20 is the maxMemory param for ParseMultipartForm, equals to 32MB (1MB = 1024 * 1024 bytes = 2^20 bytes)
 	// After you call ParseMultipartForm, the file will be saved in the server memory with maxMemory size.
@@ -97,7 +124,7 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 	lat, _ := strconv.ParseFloat(r.FormValue("lat"), 64)
 	lon, _ := strconv.ParseFloat(r.FormValue("lon"), 64)
 	p := &Post{
-		User:    "1111",
+		User:    username.(string),
 		Message: r.FormValue("message"),
 		Location: Location{
 			Lat: lat,
